@@ -1,4 +1,4 @@
-# astar-clockwise
+# astar
 
 FIXME: description
 
@@ -12,7 +12,7 @@ FIXME: explanation
 
 Run the project directly:
 
-    $ clj -m baritonehands.astar-clockwise
+    $ clj -m baritonehands.astar
 
 Run the project's tests (they'll fail until you edit them):
 

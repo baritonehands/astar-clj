@@ -1,4 +1,4 @@
 (ns user
-  (:require [baritonehands.astar-clockwise :as a*]))
+  (:require [baritonehands.astar :as a*]))
 
 
