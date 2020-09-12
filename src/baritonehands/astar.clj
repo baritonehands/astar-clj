@@ -1,4 +1,5 @@
 (ns baritonehands.astar
+  (:require [io.aviso.ansi :as color])
   (:gen-class))
 
 (defn idx->pos
@@ -79,7 +80,7 @@
                                   (conj os-inner neighbor)
                                   (assoc cf-inner neighbor current)
                                   (assoc gs-inner neighbor g)
-                                  (update fs-inner neighbor (fnil #(+ % (ny-distance current neighbor)) 0)))
+                                  (assoc fs-inner neighbor (+ g (ny-distance neighbor end))))
                                 (recur more os-inner cf-inner gs-inner fs-inner))))))
                 [next-os next-cf next-gs next-fs] (inner)]
             (recur next-os next-cf next-gs next-fs)))))))
@@ -88,14 +89,22 @@
   (let [[x y] (idx->pos left)
         [cx cy] (idx->pos right)]
     (cond
-      (or (= x cx) (= y cy)) 2
-      :else 0)))
+      (< cx x) \<
+      (< x cx) \>
+      (< cy y) \^
+      (< y cy) \⌄)))
+
+(defn heuristic [left right]
+  (let [[x y] (idx->pos left)
+        [cx cy] (idx->pos right)]
+    (+ (* 10 (ny-distance left right))
+       (Math/atan2 (- cx x) (- cy y)))))
 
 (defn shortest-path-clockwise [walls start end]
   (loop [open-set #{start}
          came-from {}
          g-score {start 0}
-         f-score {start (ny-distance start end)}]
+         f-score {start (heuristic start end)}]
     (if-not (seq open-set)
       :error
       (let [current (->> f-score
@@ -105,7 +114,8 @@
         (if (= current end)
           (walk-path came-from current)
           (let [inner (fn []
-                        (loop [[neighbor & more] (neighbors walls current)
+                        (loop [[neighbor & more] (->> (neighbors walls current))
+                                                      ;(sort-by (partial heuristic start)))
                                os-inner (disj open-set current)
                                cf-inner came-from
                                gs-inner g-score
@@ -120,7 +130,40 @@
                                   (conj os-inner neighbor)
                                   (assoc cf-inner neighbor current)
                                   (assoc gs-inner neighbor g)
-                                  (update fs-inner neighbor (fnil #(+ % (ny-distance current neighbor)) 0)))
+                                  (assoc fs-inner neighbor (+ g (heuristic neighbor end))))
                                 (recur more os-inner cf-inner gs-inner fs-inner))))))
                 [next-os next-cf next-gs next-fs] (inner)]
             (recur next-os next-cf next-gs next-fs)))))))
+
+(defn dir->pos [dir]
+  (set (map #(idx->pos % 3) dir)))
+
+(defn walls->pos [walls]
+  (-> walls
+      (update :v dir->pos)
+      (update :h dir->pos)))
+
+(defn print-tile [col highlight?]
+  (str
+    (if highlight?
+      (str color/bold-white-font color/black-bg-font))
+    (String/format "%2d" (into-array [col]))
+    color/reset-font))
+
+(defn print-floor
+  ([walls] (print-floor walls #{}))
+  ([walls path]
+   (let [rows (partition 4 (range 0 16))
+         {:keys [v h]} (walls->pos walls)
+         path-xy (set (map #(idx->pos % 4) path))]
+     (println path-xy)
+     (doseq [[y row] (map-indexed vector rows)]
+       (print " ")
+       (doseq [[x col] (map-indexed vector row)]
+         (print (print-tile col (path-xy [x y])))
+         (print (if (v [x y]) " | " "   ")))
+       (println)
+       (print " ")
+       (doseq [x (range 0 4)]
+         (print (if (h [y x]) "--   " "     ")))
+       (println)))))
