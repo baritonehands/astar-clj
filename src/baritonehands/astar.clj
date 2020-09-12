@@ -94,46 +94,62 @@
       (< cy y) \^
       (< y cy) \⌄)))
 
-(defn heuristic [left right]
+(defn angle [left right]
   (let [[x y] (idx->pos left)
         [cx cy] (idx->pos right)]
+    (Math/atan2 (- cx x) (- y cy))))
+
+(defn heuristic [start end]
+  (fn [left right]
     (+ (* 10 (ny-distance left right))
-       (Math/atan2 (- cx x) (- cy y)))))
+       (+ (angle left right) (angle start end)))))
 
 (defn shortest-path-clockwise [walls start end]
-  (loop [open-set #{start}
-         came-from {}
-         g-score {start 0}
-         f-score {start (heuristic start end)}]
-    (if-not (seq open-set)
-      :error
-      (let [current (->> f-score
-                         (sort-by val)
-                         (filter #(contains? open-set (key %)))
-                         (ffirst))]
-        (if (= current end)
-          (walk-path came-from current)
-          (let [inner (fn []
-                        (loop [[neighbor & more] (->> (neighbors walls current))
-                                                      ;(sort-by (partial heuristic start)))
-                               os-inner (disj open-set current)
-                               cf-inner came-from
-                               gs-inner g-score
-                               fs-inner f-score]
-                          (if-not neighbor
-                            [os-inner cf-inner gs-inner fs-inner]
-                            (let [g (inc (gs-inner current))]
-                              (if (or (not (gs-inner neighbor))
-                                      (< g (gs-inner neighbor)))
-                                (recur
-                                  more
-                                  (conj os-inner neighbor)
-                                  (assoc cf-inner neighbor current)
-                                  (assoc gs-inner neighbor g)
-                                  (assoc fs-inner neighbor (+ g (heuristic neighbor end))))
-                                (recur more os-inner cf-inner gs-inner fs-inner))))))
-                [next-os next-cf next-gs next-fs] (inner)]
-            (recur next-os next-cf next-gs next-fs)))))))
+  (let [h (heuristic start end)]
+    (loop [open-set #{start}
+           came-from {}
+           g-score {start 0}
+           f-score {start (ny-distance start end)}]
+      (if-not (seq open-set)
+        :error
+        (let [current (->> f-score
+                           (sort-by val)
+                           (filter #(contains? open-set (key %)))
+                           (ffirst))]
+          (if (= current end)
+            (walk-path came-from current)
+            (let [inner (fn []
+                          (loop [[neighbor & more] (->> (neighbors walls current))
+                                                        ;(sort-by (partial heuristic start)))
+                                 os-inner (disj open-set current)
+                                 cf-inner came-from
+                                 gs-inner g-score
+                                 fs-inner f-score]
+                            (if-not neighbor
+                              [os-inner cf-inner gs-inner fs-inner]
+                              (let [g (inc (gs-inner current))]
+                                (if (or (not (gs-inner neighbor))
+                                        (< g (gs-inner neighbor)))
+                                  (recur
+                                    more
+                                    (conj os-inner neighbor)
+                                    (assoc cf-inner neighbor current)
+                                    (assoc gs-inner neighbor g)
+                                    (assoc fs-inner neighbor (+ g (h neighbor end))))
+                                  (recur more os-inner cf-inner gs-inner fs-inner))))))
+                  [next-os next-cf next-gs next-fs] (inner)]
+              (recur next-os next-cf next-gs next-fs))))))))
+
+(defn all-heuristics
+  ([start] (all-heuristics start (range 0 16)))
+  ([start ends]
+   (for [end ends
+         :when (not= start end)
+         :let [h (heuristic start end)]]
+     (for [current (range 0 16)
+           :when (and (not= current start)
+                      (not= current end))]
+       [[start end current] (h current end)]))))
 
 (defn dir->pos [dir]
   (set (map #(idx->pos % 3) dir)))
@@ -156,7 +172,6 @@
    (let [rows (partition 4 (range 0 16))
          {:keys [v h]} (walls->pos walls)
          path-xy (set (map #(idx->pos % 4) path))]
-     (println path-xy)
      (doseq [[y row] (map-indexed vector rows)]
        (print " ")
        (doseq [[x col] (map-indexed vector row)]
