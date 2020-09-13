@@ -1,5 +1,6 @@
 (ns baritonehands.astar
-  (:require [io.aviso.ansi :as color])
+  (:require [io.aviso.ansi :as color]
+            [clojure.set :as set])
   (:gen-class))
 
 (defn idx->pos
@@ -97,12 +98,11 @@
 (defn angle [left right]
   (let [[x y] (idx->pos left)
         [cx cy] (idx->pos right)]
-    (Math/atan2 (- cx x) (- y cy))))
+    (Math/atan2 (- cx x) (- cy y))))
 
 (defn heuristic [start end]
   (fn [left right]
-    (+ (* 10 (ny-distance left right))
-       (+ (angle left right) (angle start end)))))
+    (+ (angle left right) (angle start end))))
 
 (defn shortest-path-clockwise [walls start end]
   (let [h (heuristic start end)]
@@ -120,7 +120,7 @@
             (walk-path came-from current)
             (let [inner (fn []
                           (loop [[neighbor & more] (->> (neighbors walls current))
-                                                        ;(sort-by (partial heuristic start)))
+                                 ;(sort-by (partial heuristic start)))
                                  os-inner (disj open-set current)
                                  cf-inner came-from
                                  gs-inner g-score
@@ -135,7 +135,7 @@
                                     (conj os-inner neighbor)
                                     (assoc cf-inner neighbor current)
                                     (assoc gs-inner neighbor g)
-                                    (assoc fs-inner neighbor (+ g (h neighbor end))))
+                                    (assoc fs-inner neighbor (h neighbor end)))
                                   (recur more os-inner cf-inner gs-inner fs-inner))))))
                   [next-os next-cf next-gs next-fs] (inner)]
               (recur next-os next-cf next-gs next-fs))))))))
@@ -182,3 +182,63 @@
        (doseq [x (range 0 4)]
          (print (if (h [y x]) "--   " "     ")))
        (println)))))
+
+(defn init-available [walls path idx opts]
+  (if-not (seq opts)
+    (set/difference
+      (set (neighbors walls idx))
+      (set path))
+    opts))
+
+(defn path-split [path1 path2]
+  (loop [[left & lmore] path1
+         [right & rmore] path2
+         last= (first path1)]
+    (if (not= left right)
+      [[last= left] [last= right]]
+      (recur lmore rmore left))))
+
+(defn break-tie [start end path1 path2]
+  (let [orientation (angle start end)
+        [p1-split p2-split] (path-split path1 path2)
+        p1-cw (+ (apply angle p1-split) orientation)
+        p2-cw (+ (apply angle p2-split) orientation)]
+    (println p1-split p2-split)
+    (if (> p1-cw p2-cw)
+      path1
+      path2)))
+
+(defn dfs [walls start end]
+  (loop [path [start]
+         avail {start (set (neighbors walls start))}
+         paths []]
+    (let [current (last path)
+          opts (avail current)]
+      (cond
+        (nil? current)
+        (let [ps (->> paths (sort-by count) (partition-by count) first)]
+          (if (= (count ps) 2)
+            (apply break-tie start end ps)
+            (first ps)))
+
+        (= current end)
+        (recur (pop path)
+               (update avail (last (pop path)) disj current)
+               (conj paths path))
+
+        (empty? opts)
+        (recur (pop path)
+               (update avail (last (pop path)) disj current)
+               paths)
+
+        :else
+        (recur (conj path (first opts))
+               (update avail (first opts) (partial init-available walls path (first opts)))
+               paths)))))
+
+(defn all-dfs
+  ([walls start] (all-dfs walls start (range 0 16)))
+  ([walls start ends]
+   (for [end ends
+         :when (not= start end)]
+     [[start end] (dfs walls start end)])))

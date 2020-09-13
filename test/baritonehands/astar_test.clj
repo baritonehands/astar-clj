@@ -730,7 +730,7 @@
 
 (defn run-one-floor [walls floor]
   (doseq [[[start end] path] floor]
-    (is (= path (shortest-path walls start end))
+    (is (= path (dfs walls start end))
         (str start " -> " end))))
 
 (deftest floor1-test
