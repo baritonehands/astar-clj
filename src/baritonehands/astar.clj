@@ -102,7 +102,7 @@
 
 (defn heuristic [start end]
   (fn [left right]
-    (+ (angle left right) (angle start end))))
+    (* (angle left right) (angle start end))))
 
 (defn shortest-path-clockwise [walls start end]
   (let [h (heuristic start end)]
@@ -159,23 +159,28 @@
       (update :v dir->pos)
       (update :h dir->pos)))
 
-(defn print-tile [col highlight?]
+(defn print-tile [col {:keys [start? end? highlight?]}]
   (str
-    (if highlight?
-      (str color/bold-white-font color/black-bg-font))
+    (cond
+      start? (str color/bold-black-font color/white-bg-font)
+      end? (str color/bold-black-font color/yellow-bg-font)
+      highlight? (str color/bold-white-font color/black-bg-font))
     (String/format "%2d" (into-array [col]))
     color/reset-font))
 
 (defn print-floor
-  ([walls] (print-floor walls #{}))
+  ([walls] (print-floor walls []))
   ([walls path]
    (let [rows (partition 4 (range 0 16))
          {:keys [v h]} (walls->pos walls)
-         path-xy (set (map #(idx->pos % 4) path))]
+         pathv (mapv #(idx->pos % 4) path)
+         path-xy (set pathv)]
      (doseq [[y row] (map-indexed vector rows)]
        (print " ")
        (doseq [[x col] (map-indexed vector row)]
-         (print (print-tile col (path-xy [x y])))
+         (print (print-tile col {:highlight? (path-xy [x y])
+                                 :start?     (= [x y] (first pathv))
+                                 :end?       (= [x y] (last pathv))}))
          (print (if (v [x y]) " | " "   ")))
        (println)
        (print " ")
@@ -199,12 +204,11 @@
       (recur lmore rmore left))))
 
 (defn break-tie [start end path1 path2]
-  (let [orientation (angle start end)
-        [p1-split p2-split] (path-split path1 path2)
-        p1-cw (+ (apply angle p1-split) orientation)
-        p2-cw (+ (apply angle p2-split) orientation)]
-    (println p1-split p2-split)
-    (if (> p1-cw p2-cw)
+  (let [[p1-split p2-split] (path-split path1 path2)
+        orientation (angle (first p1-split) end)
+        p1-cw (* (apply angle p1-split) orientation)
+        p2-cw (* (apply angle p2-split) orientation)]
+    (if (< p1-cw p2-cw)
       path1
       path2)))
 
@@ -242,3 +246,11 @@
    (for [end ends
          :when (not= start end)]
      [[start end] (dfs walls start end)])))
+
+(defn print-all-dfs
+  ([walls start] (print-all-dfs walls start (range 0 16)))
+  ([walls start ends]
+   (doseq [end ends
+           :when (not= start end)]
+     (println (str color/bold-black-font color/green-bg-font start " -> " end color/reset-font "\n"))
+     (print-floor walls (dfs walls start end)))))
