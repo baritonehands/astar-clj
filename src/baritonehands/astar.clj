@@ -8,6 +8,12 @@
   ([idx size]
    [(mod idx size) (long (/ idx size))]))
 
+(defn pos+ [[x y] [cx cy]]
+  [(+ x cx) (+ cy y)])
+
+(defn pos- [[x y] [cx cy]]
+  [(- x cx) (- cy y)])
+
 (defn ny-distance [left right]
   (let [[x y] (idx->pos left)
         [cx cy] (idx->pos right)]
@@ -85,15 +91,6 @@
                                 (recur more os-inner cf-inner gs-inner fs-inner))))))
                 [next-os next-cf next-gs next-fs] (inner)]
             (recur next-os next-cf next-gs next-fs)))))))
-
-(defn direction [left right]
-  (let [[x y] (idx->pos left)
-        [cx cy] (idx->pos right)]
-    (cond
-      (< cx x) \<
-      (< x cx) \>
-      (< cy y) \^
-      (< y cy) \⌄)))
 
 (defn angle [left right]
   (let [[x y] (idx->pos left)
@@ -188,6 +185,35 @@
          (print (if (h [y x]) "--   " "     ")))
        (println)))))
 
+(defn directions [left right]
+  (let [[x y] (idx->pos left)
+        [cx cy] (idx->pos right)
+        [dx dy] (pos- [x y] [cx cy])]
+    (cond-> #{}
+            (pos? dx) (conj :L)
+            (neg? dx) (conj :R)
+            (pos? dy) (conj :D)
+            (neg? dy) (conj :U))))
+
+(def cw-mapping
+  {#{:D :L} :D
+   #{:L :U} :L
+   #{:U :R} :U
+   #{:R :D} :R})
+
+(defn clockwise [current end opts]
+  (let [mapper (juxt (comp first (partial directions current)) identity)
+        dir->opt (->> (map mapper opts) (into {}))
+        dirs (set (keys dir->opt))
+        simple (get cw-mapping dirs)
+        orientation (directions current end)]
+    (cond
+      simple (dir->opt simple)
+      (:U orientation) (dir->opt :L)
+      (:D orientation) (dir->opt :R)
+      (:L orientation) (dir->opt :D)
+      (:R orientation) (dir->opt :U))))
+
 (defn init-available [walls path idx opts]
   (if-not (seq opts)
     (set/difference
@@ -200,15 +226,14 @@
          [right & rmore] path2
          last= (first path1)]
     (if (not= left right)
-      [[last= left] [last= right]]
+      [last= left right]
       (recur lmore rmore left))))
 
-(defn break-tie [start end path1 path2]
-  (let [[p1-split p2-split] (path-split path1 path2)
-        orientation (angle (first p1-split) end)
-        p1-cw (* (apply angle p1-split) orientation)
-        p2-cw (* (apply angle p2-split) orientation)]
-    (if (< p1-cw p2-cw)
+(defn break-tie [end path1 path2]
+  (let [[current left right] (path-split path1 path2)
+        dir (clockwise current end [left right])]
+    (println "Breaking tie" path1 path2)
+    (if (= dir left)
       path1
       path2)))
 
@@ -222,7 +247,7 @@
         (nil? current)
         (let [ps (->> paths (sort-by count) (partition-by count) first)]
           (if (= (count ps) 2)
-            (apply break-tie start end ps)
+            (apply break-tie end ps)
             (first ps)))
 
         (= current end)
