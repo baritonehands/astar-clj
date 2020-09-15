@@ -195,24 +195,59 @@
             (pos? dy) (conj :D)
             (neg? dy) (conj :U))))
 
-(def cw-mapping
-  {#{:D :L} :D
-   #{:L :U} :L
-   #{:U :R} :U
-   #{:R :D} :R})
+(def cw-mappings
+  {#{:U :L} {#{:D :L} :D
+             #{:L :U} :L
+             #{:U :R} :R
+             #{:R :D} :D
+             #{:U :D} :D
+             #{:L :R} :L}
+   #{:D :L} {#{:D :L} :D
+             #{:L :U} :L
+             #{:U :R} :R
+             #{:R :D} :D
+             #{:U :D} :D
+             #{:L :R} :R}
+   #{:U :R} {#{:D :L} :L
+             #{:L :U} :U
+             #{:U :R} :U
+             #{:R :D} :R
+             #{:U :D} :U
+             #{:L :R} :L}
+   #{:D :R} {#{:D :L} :L
+             #{:L :U} :U
+             #{:U :R} :U
+             #{:R :D} :R
+             #{:U :D} :U
+             #{:L :R} :R}
+   #{:U}    {#{:D :L} :L
+             #{:L :U} :L
+             #{:U :R} :U
+             #{:R :D} :D
+             #{:L :R} :L}
+   #{:D}    {#{:D :L} :D
+             #{:L :U} :U
+             #{:U :R} :R
+             #{:R :D} :R
+             #{:L :R} :R}
+   #{:L}    {#{:D :L} :D
+             #{:L :U} :L
+             #{:U :R} :R
+             #{:R :D} :D
+             #{:U :D} :D}
+   #{:R}    {#{:D :L} :L
+             #{:L :U} :U
+             #{:U :R} :U
+             #{:R :D} :R
+             #{:U :D} :U}})
 
 (defn clockwise [current end opts]
   (let [mapper (juxt (comp first (partial directions current)) identity)
         dir->opt (->> (map mapper opts) (into {}))
         dirs (set (keys dir->opt))
-        simple (get cw-mapping dirs)
-        orientation (directions current end)]
-    (cond
-      simple (dir->opt simple)
-      (:U orientation) (dir->opt :L)
-      (:D orientation) (dir->opt :R)
-      (:L orientation) (dir->opt :D)
-      (:R orientation) (dir->opt :U))))
+        orientation (directions current end)
+        cw-mapping (cw-mappings orientation)]
+    (dir->opt (cw-mapping dirs))))
 
 (defn init-available [walls path idx opts]
   (if-not (seq opts)
@@ -232,7 +267,7 @@
 (defn break-tie [end path1 path2]
   (let [[current left right] (path-split path1 path2)
         dir (clockwise current end [left right])]
-    (println "Breaking tie" path1 path2)
+    ;(println "Breaking tie" path1 path2)
     (if (= dir left)
       path1
       path2)))
@@ -247,7 +282,10 @@
         (nil? current)
         (let [ps (->> paths (sort-by count) (partition-by count) first)]
           (if (= (count ps) 2)
-            (apply break-tie end ps)
+            (let [path (apply break-tie end ps)]
+              (println (str color/bold-black-font color/green-bg-font start " -> " end color/reset-font "\n"))
+              (print-floor walls path)
+              path)
             (first ps)))
 
         (= current end)
